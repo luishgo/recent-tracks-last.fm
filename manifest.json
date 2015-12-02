@@ -1,21 +1,23 @@
 {
-  "manifest_version": 2,
-
-  "name": "last.fm Recent Tracks",
-  "description": "Display the Recent Tracks scrobbled on last.fm",
-  "version": "1.0",
-
-  "browser_action": {
-    "default_icon": "download.png",
-    "default_popup": "popup.html"    
-  },
   "background": {
+    "persistent": false,
     "page": "background.html"
   },
+  "browser_action": {
+    "default_icon": "gmail_not_logged_in.png"
+  },
+  "default_locale": "en",
+  "description": "__MSG_gmailcheck_description__",
+  "icons": {
+    "128": "icon_128.png"
+  },
+  "name": "__MSG_gmailcheck_name__",
   "permissions": [
-    "activeTab",
+    "alarms",
     "tabs",
-    "http://ws.audioscrobbler.com/"
-  ]
+    "webNavigation",
+    "*://*.google.com/"
+   ],
+  "version": "4.4.0",
+  "manifest_version": 2
 }
-
