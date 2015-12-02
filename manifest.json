@@ -1,0 +1,21 @@
+{
+  "manifest_version": 2,
+
+  "name": "last.fm Recent Tracks",
+  "description": "Display the Recent Tracks scrobbled on last.fm",
+  "version": "1.0",
+
+  "browser_action": {
+    "default_icon": "download.png",
+    "default_popup": "popup.html"    
+  },
+  "background": {
+    "page": "background.html"
+  },
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "http://ws.audioscrobbler.com/"
+  ]
+}
+
