@@ -62,16 +62,22 @@ LoadingAnimation.prototype.stop = function() {
 
 function updateIcon() {
   if (!localStorage.hasOwnProperty('displayTrack')) {
-    chrome.browserAction.setIcon({path:"gmail_not_logged_in.png"});
+    chrome.browserAction.setIcon({path:"last.fm.off.png"});
     chrome.browserAction.setBadgeBackgroundColor({color:[190, 190, 190, 230]});
     chrome.browserAction.setBadgeText({text:"?"});
     chrome.browserAction.setTitle({title: "?"});
   } else {
-    chrome.browserAction.setIcon({path: "gmail_logged_in.png"});
-    chrome.browserAction.setBadgeBackgroundColor({color:[208, 0, 24, 255]});
-    chrome.browserAction.setBadgeText({
-      text: localStorage.displayTrack != " - " ? "1" : "0"
-    });
+    chrome.browserAction.setIcon({path: "last.fm.on.png"});
+    if (localStorage.displayTrack != " - ") {
+      loadingAnimation.start();
+    } else {
+      loadingAnimation.stop();
+      chrome.browserAction.setBadgeText({text:""});
+    }
+    // chrome.browserAction.setBadgeBackgroundColor({color:[208, 0, 24, 255]});
+    // chrome.browserAction.setBadgeText({
+    //   text: localStorage.displayTrack != " - " ? "1" : "0"
+    // });
     chrome.browserAction.setTitle({title: localStorage.displayTrack != " - " ? localStorage.displayTrack : ""});
   }
 }
@@ -97,20 +103,11 @@ function startRequest(params) {
   // outstanding.
   if (params && params.scheduleRequest) scheduleRequest();
 
-  function stopLoadingAnimation() {
-    if (params && params.showLoadingAnimation) loadingAnimation.stop();
-  }
-
-  if (params && params.showLoadingAnimation)
-    loadingAnimation.start();
-
   getRecentTracks(
     function(artist, track) {
-      stopLoadingAnimation();
       updateRecentTrack(artist, track);
     },
     function() {
-      stopLoadingAnimation();
       delete localStorage.displayTrack;
       updateIcon();
     }
