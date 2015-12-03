@@ -30,9 +30,8 @@ function getInstanceId() {
 }
 
 function getFeedUrl() {
-  // "zx" is a Gmail query parameter that is expected to contain a random
-  // string and may be ignored/stripped.
-  return getGmailUrl() + "feed/atom?zx=" + encodeURIComponent(getInstanceId());
+  var user = 'luishgo';
+  return 'http://ws.audioscrobbler.com/2.0/?api_key=37bdac3246aca8cdde93dfabad064452&method=user.getRecentTracks&user='+user+'&limit=5&format=json';
 }
 
 function isGmailUrl(url) {
@@ -172,17 +171,14 @@ function getInboxCount(onSuccess, onError) {
       if (xhr.readyState != 4)
         return;
 
-      if (xhr.responseXML) {
-        var xmlDoc = xhr.responseXML;
-        var fullCountSet = xmlDoc.evaluate("/gmail:feed/gmail:fullcount",
-            xmlDoc, gmailNSResolver, XPathResult.ANY_TYPE, null);
-        var fullCountNode = fullCountSet.iterateNext();
-        if (fullCountNode) {
-          handleSuccess(fullCountNode.textContent);
-          return;
+      if (xhr.response) {
+        var firstResult = xhr.response.recenttracks.track[0];
+        if (firstResult['@attr'] && firstResult['@attr'].nowplaying == 'true') {
+          handleSuccess(1);
         } else {
-          console.error(chrome.i18n.getMessage("gmailcheck_node_error"));
+          handleSuccess(0);
         }
+        return;
       }
 
       handleError();
@@ -193,6 +189,7 @@ function getInboxCount(onSuccess, onError) {
     };
 
     xhr.open("GET", getFeedUrl(), true);
+    xhr.responseType = 'json';
     xhr.send(null);
   } catch(e) {
     console.error(chrome.i18n.getMessage("gmailcheck_exception", e));
@@ -213,7 +210,6 @@ function updateUnreadCount(count) {
   if (changed)
     animateFlip();
 }
-
 
 function ease(x) {
   return (1-Math.sin(Math.PI/2+x*Math.PI))/2;
@@ -271,7 +267,7 @@ function onInit() {
   if (!oldChromeVersion) {
     // TODO(mpcomplete): We should be able to remove this now, but leaving it
     // for a little while just to be sure the refresh alarm is working nicely.
-    chrome.alarms.create('watchdog', {periodInMinutes:5});
+    chrome.alarms.create('watchdog', {periodInMinutes:1});
   }
 }
 
