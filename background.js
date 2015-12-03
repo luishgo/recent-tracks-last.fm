@@ -13,30 +13,9 @@ var requestTimeout = 1000 * 2;  // 2 seconds
 var rotation = 0;
 var loadingAnimation = new LoadingAnimation();
 
-// Legacy support for pre-event-pages.
-var oldChromeVersion = !chrome.runtime;
-var requestTimerId;
-
-function getGmailUrl() {
-  return "https://mail.google.com/mail/";
-}
-	
-// Identifier used to debug the possibility of multiple instances of the
-// extension making requests on behalf of a single user.
-function getInstanceId() {
-  if (!localStorage.hasOwnProperty("instanceId"))
-    localStorage.instanceId = 'gmc' + parseInt(Date.now() * Math.random(), 10);
-  return localStorage.instanceId;
-}
-
 function getFeedUrl() {
   var user = 'luishgo';
   return 'http://ws.audioscrobbler.com/2.0/?api_key=37bdac3246aca8cdde93dfabad064452&method=user.getRecentTracks&user='+user+'&limit=5&format=json';
-}
-
-function isGmailUrl(url) {
-  // Return whether the URL starts with the Gmail prefix.
-  return url.indexOf(getGmailUrl()) == 0;
 }
 
 // A "loading" animation displayed while we wait for the first response from
@@ -82,16 +61,18 @@ LoadingAnimation.prototype.stop = function() {
 }
 
 function updateIcon() {
-  if (!localStorage.hasOwnProperty('unreadCount')) {
+  if (!localStorage.hasOwnProperty('displayTrack')) {
     chrome.browserAction.setIcon({path:"gmail_not_logged_in.png"});
     chrome.browserAction.setBadgeBackgroundColor({color:[190, 190, 190, 230]});
     chrome.browserAction.setBadgeText({text:"?"});
+    chrome.browserAction.setTitle({title: "?"});
   } else {
     chrome.browserAction.setIcon({path: "gmail_logged_in.png"});
     chrome.browserAction.setBadgeBackgroundColor({color:[208, 0, 24, 255]});
     chrome.browserAction.setBadgeText({
-      text: localStorage.unreadCount != "0" ? localStorage.unreadCount : ""
+      text: localStorage.displayTrack != " - " ? "1" : "0"
     });
+    chrome.browserAction.setTitle({title: localStorage.displayTrack != " - " ? localStorage.displayTrack : ""});
   }
 }
 	
@@ -103,18 +84,10 @@ function scheduleRequest() {
   var delay = Math.min(multiplier * pollIntervalMin, pollIntervalMax);
   delay = Math.round(delay);
   console.log('Scheduling for: ' + delay);
-
-  if (oldChromeVersion) {
-    if (requestTimerId) {
-      window.clearTimeout(requestTimerId);
-    }
-    requestTimerId = window.setTimeout(onAlarm, delay*60*1000);
-  } else {
-    console.log('Creating alarm');
-    // Use a repeating alarm so that it fires again if there was a problem
-    // setting the next alarm.
-    chrome.alarms.create('refresh', {periodInMinutes: delay});
-  }
+  console.log('Creating alarm');
+  // Use a repeating alarm so that it fires again if there was a problem
+  // setting the next alarm.
+  chrome.alarms.create('refresh', {periodInMinutes: delay});
 }
 
 // ajax stuff
@@ -131,30 +104,30 @@ function startRequest(params) {
   if (params && params.showLoadingAnimation)
     loadingAnimation.start();
 
-  getInboxCount(
-    function(count) {
+  getRecentTracks(
+    function(artist, track) {
       stopLoadingAnimation();
-      updateUnreadCount(count);
+      updateRecentTrack(artist, track);
     },
     function() {
       stopLoadingAnimation();
-      delete localStorage.unreadCount;
+      delete localStorage.displayTrack;
       updateIcon();
     }
   );
 }
 
-function getInboxCount(onSuccess, onError) {
+function getRecentTracks(onSuccess, onError) {
   var xhr = new XMLHttpRequest();
   var abortTimerId = window.setTimeout(function() {
     xhr.abort();  // synchronously calls onreadystatechange
   }, requestTimeout);
 
-  function handleSuccess(count) {
+  function handleSuccess(artist, track) {
     localStorage.requestFailureCount = 0;
     window.clearTimeout(abortTimerId);
     if (onSuccess)
-      onSuccess(count);
+      onSuccess(artist, track);
   }
 
   var invokedErrorCallback = false;
@@ -174,9 +147,9 @@ function getInboxCount(onSuccess, onError) {
       if (xhr.response) {
         var firstResult = xhr.response.recenttracks.track[0];
         if (firstResult['@attr'] && firstResult['@attr'].nowplaying == 'true') {
-          handleSuccess(1);
+          handleSuccess(firstResult.artist['#text'], firstResult.name);
         } else {
-          handleSuccess(0);
+          handleSuccess("", "");
         }
         return;
       }
@@ -197,15 +170,10 @@ function getInboxCount(onSuccess, onError) {
   }
 }
 
-function gmailNSResolver(prefix) {
-  if(prefix == 'gmail') {
-    return 'http://purl.org/atom/ns#';
-  }
-}
-
-function updateUnreadCount(count) {
-  var changed = localStorage.unreadCount != count;
-  localStorage.unreadCount = count;
+function updateRecentTrack(artist, track) {
+  var displayTrack = artist + ' - ' + track;
+  var changed = localStorage.displayTrack != displayTrack;
+  localStorage.displayTrack = displayTrack;
   updateIcon();
   if (changed)
     animateFlip();
@@ -243,32 +211,11 @@ function drawIconAtRotation() {
       canvas.width,canvas.height)});
 }
 
-function goToInbox() {
-  console.log('Going to inbox...');
-  chrome.tabs.getAllInWindow(undefined, function(tabs) {
-    for (var i = 0, tab; tab = tabs[i]; i++) {
-      if (tab.url && isGmailUrl(tab.url)) {
-        console.log('Found Gmail tab: ' + tab.url + '. ' +
-                    'Focusing and refreshing count...');
-        chrome.tabs.update(tab.id, {selected: true});
-        startRequest({scheduleRequest:false, showLoadingAnimation:false});
-        return;
-      }
-    }
-    console.log('Could not find Gmail tab. Creating one...');
-    chrome.tabs.create({url: getGmailUrl()});
-  });
-}
-
 function onInit() {
   console.log('onInit');
   localStorage.requestFailureCount = 0;  // used for exponential backoff
   startRequest({scheduleRequest:true, showLoadingAnimation:true});
-  if (!oldChromeVersion) {
-    // TODO(mpcomplete): We should be able to remove this now, but leaving it
-    // for a little while just to be sure the refresh alarm is working nicely.
-    chrome.alarms.create('watchdog', {periodInMinutes:1});
-  }
+  chrome.alarms.create('watchdog', {periodInMinutes:1});
 }
 
 function onAlarm(alarm) {
@@ -294,53 +241,12 @@ function onWatchdog() {
   });
 }
 
-if (oldChromeVersion) {
-  updateIcon();
-  onInit();
-} else {
-  chrome.runtime.onInstalled.addListener(onInit);
-  chrome.alarms.onAlarm.addListener(onAlarm);
-}
-
-var filters = {
-  // TODO(aa): Cannot use urlPrefix because all the url fields lack the protocol
-  // part. See crbug.com/140238.
-  url: [{urlContains: getGmailUrl().replace(/^https?\:\/\//, '')}]
-};
-
-function onNavigate(details) {
-  if (details.url && isGmailUrl(details.url)) {
-    console.log('Recognized Gmail navigation to: ' + details.url + '.' +
-                'Refreshing count...');
-    startRequest({scheduleRequest:false, showLoadingAnimation:false});
-  }
-}
-if (chrome.webNavigation && chrome.webNavigation.onDOMContentLoaded &&
-    chrome.webNavigation.onReferenceFragmentUpdated) {
-  chrome.webNavigation.onDOMContentLoaded.addListener(onNavigate, filters);
-  chrome.webNavigation.onReferenceFragmentUpdated.addListener(
-      onNavigate, filters);
-} else {
-  chrome.tabs.onUpdated.addListener(function(_, details) {
-    onNavigate(details);
-  });
-}
-
-chrome.browserAction.onClicked.addListener(goToInbox);
+chrome.runtime.onInstalled.addListener(onInit);
+chrome.alarms.onAlarm.addListener(onAlarm);
 
 if (chrome.runtime && chrome.runtime.onStartup) {
   chrome.runtime.onStartup.addListener(function() {
     console.log('Starting browser... updating icon.');
-    startRequest({scheduleRequest:false, showLoadingAnimation:false});
-    updateIcon();
-  });
-} else {
-  // This hack is needed because Chrome 22 does not persist browserAction icon
-  // state, and also doesn't expose onStartup. So the icon always starts out in
-  // wrong state. We don't actually use onStartup except as a clue that we're
-  // in a version of Chrome that has this problem.
-  chrome.windows.onCreated.addListener(function() {
-    console.log('Window created... updating icon.');
     startRequest({scheduleRequest:false, showLoadingAnimation:false});
     updateIcon();
   });
