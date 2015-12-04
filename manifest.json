@@ -13,8 +13,10 @@
   },
   "name": "__MSG_name__",
   "permissions": [
-    "alarms"
+    "alarms",
+    "storage"
    ],
+   "options_page": "options.html",
   "version": "0.1",
   "manifest_version": 2
 }

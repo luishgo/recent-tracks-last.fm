@@ -4,20 +4,27 @@ var canvasContext = canvas.getContext('2d');
 var requestTimeout = 1000 * 2;  // 2 seconds
 
 // ajax stuff
-function startRequest(params) {
-  getRecentTracks(
-    function(track) {
-      localStorage.track = JSON.stringify(track);
-      updateIcon();
-    },
-    function() {
-      delete localStorage.track;
-      updateIcon();
-    }
-  );
+function startRequest() {
+  chrome.storage.sync.get({  
+    username: ''
+  }, function(items) {
+    getRecentTracks(
+      'http://ws.audioscrobbler.com/2.0/?api_key=37bdac3246aca8cdde93dfabad064452&method=user.getRecentTracks&user='+items.username+'&limit=5&format=json',
+      function(track) {
+        updateIcon(track, null);
+      },
+      function() {
+        updateIcon();
+      },
+      function(errorResponse) {
+        updateIcon(null, errorResponse);
+      }
+    );
+
+  });
 }
 
-function getRecentTracks(onSuccess, onError) {
+function getRecentTracks(url, onSuccess, onErrorXHR, onErrorAPI) {
   var xhr = new XMLHttpRequest();
   var abortTimerId = window.setTimeout(function() {
     xhr.abort();  // synchronously calls onreadystatechange
@@ -29,11 +36,16 @@ function getRecentTracks(onSuccess, onError) {
   }
 
   var invokedErrorCallback = false;
-  function handleError() {  
+  function handleErrorXHR() {  
     window.clearTimeout(abortTimerId);
-    if (onError && !invokedErrorCallback)
-      onError();
+    if (onErrorXHR && !invokedErrorCallback)
+      onErrorXHR();
     invokedErrorCallback = true;
+  }
+
+  function handleErrorAPI(errorResponse) {  
+    window.clearTimeout(abortTimerId);
+    if (onErrorAPI) onErrorAPI(errorResponse);
   }
 
   try {
@@ -41,47 +53,50 @@ function getRecentTracks(onSuccess, onError) {
       if (xhr.readyState != 4) return;
 
       if (xhr.response) {
-        var firstResult = xhr.response.recenttracks.track[0];
-        handleSuccess({
-          artist: firstResult.artist['#text'],
-          name: firstResult.name,
-          playing: firstResult['@attr'] && firstResult['@attr'].nowplaying == 'true'
-        });
+        if (xhr.response.recenttracks) {
+          var firstResult = xhr.response.recenttracks.track[0];
+          handleSuccess({
+            artist: firstResult.artist['#text'],
+            name: firstResult.name,
+            playing: firstResult['@attr'] && firstResult['@attr'].nowplaying == 'true'
+          });
+        } else {
+          handleErrorAPI(xhr.response);
+        }
         return;
       }
 
-      handleError();
+      handleErrorXHR();
     };
 
     xhr.onerror = function(error) {
-      handleError();
+      handleErrorXHR();
     };
 
-    xhr.open("GET", getLastFmUrl(), true);
+    xhr.open("GET", url, true);
     xhr.responseType = 'json';
     xhr.send(null);
   } catch(e) {
     console.error(chrome.i18n.getMessage("exception", e));
-    handleError();
+    handleErrorXHR();
   }
 }
 
-function getLastFmUrl() {
-  var user = 'luishgo';
-  return 'http://ws.audioscrobbler.com/2.0/?api_key=37bdac3246aca8cdde93dfabad064452&method=user.getRecentTracks&user='+user+'&limit=5&format=json';
-}
-
-function updateIcon() {
-  var track = localStorage.hasOwnProperty('track') ? JSON.parse(localStorage.track) : null;
-
+function updateIcon(track, errorResponse) {
   if (track && track.playing) {
     chrome.browserAction.setIcon({path: "last.fm.on.png"});
+    chrome.browserAction.setBadgeText({text: ""});
     chrome.browserAction.setTitle({title: track.artist + ' - ' + track.name});
+  } else if (errorResponse) {
+    chrome.browserAction.setIcon({path:"last.fm.off.png"});
+    chrome.browserAction.setBadgeBackgroundColor({color:[208, 0, 24, 255]});
+    chrome.browserAction.setBadgeText({text: "!"});
+    chrome.browserAction.setTitle({title: errorResponse.message});
   } else {
     chrome.browserAction.setIcon({path:"last.fm.off.png"});
-    chrome.browserAction.setTitle({title: ""});
+    chrome.browserAction.setBadgeText({text: ""});
+    chrome.browserAction.setTitle({title: "No currently scrobbling"});
   }
-
 }
 
 function onAlarm(alarm) {
