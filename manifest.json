@@ -7,17 +7,14 @@
     "default_icon": "last.fm.off.png"
   },
   "default_locale": "en",
-  "description": "__MSG_gmailcheck_description__",
+  "description": "__MSG_description__",
   "icons": {
     "128": "icon_128.png"
   },
-  "name": "__MSG_gmailcheck_name__",
+  "name": "__MSG_name__",
   "permissions": [
-    "alarms",
-    "tabs",
-    "webNavigation",
-    "*://*.google.com/"
+    "alarms"
    ],
-  "version": "4.4.0",
+  "version": "0.1",
   "manifest_version": 2
 }
