@@ -54,6 +54,7 @@ function getRecentTracks(url, onSuccess, onErrorXHR, onErrorAPI) {
 
       if (xhr.response) {
         if (xhr.response.recenttracks) {
+          localStorage.tracks = JSON.stringify(xhr.response.recenttracks.track);
           var firstResult = xhr.response.recenttracks.track[0];
           handleSuccess({
             artist: firstResult.artist['#text'],
